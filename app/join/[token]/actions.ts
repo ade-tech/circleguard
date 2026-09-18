@@ -3,13 +3,15 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { checkJoinEligibility } from "@/lib/demo-banking/join-eligibility";
+import { OpenBankingNigeriaSandboxAdapter } from "@/lib/open-banking/sandbox-adapter";
 
 export async function acceptInvitation(formData: FormData) {
   const token = String(formData.get("token") ?? "");
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect(`/auth?next=/join/${token}`);
-  if (!user.user_metadata.demo_bank_profile_key) redirect(`/bank?next=/join/${token}`);
+  const connection = user.user_metadata.sandbox_bank_connection as { bvn?: string } | undefined;
+  if (!connection?.bvn) redirect(`/bank?next=/join/${token}`);
 
   const { data: invitation, error: invitationError } = await supabase.rpc(
     "get_invitation_by_token",
@@ -19,10 +21,10 @@ export async function acceptInvitation(formData: FormData) {
   const circleId = invitationRecord?.circle_id as string | undefined;
   if (invitationError || !circleId) redirect(`/join/${token}?error=invalid_invite`);
 
-  const eligibility = checkJoinEligibility(
-    String(user.user_metadata.demo_bank_profile_key),
-    Number(invitationRecord?.contribution_amount),
-  );
+  const openBanking = new OpenBankingNigeriaSandboxAdapter();
+  const snapshot = await openBanking.getAccountsForBvn(connection.bvn, user.user_metadata.full_name || "Circle member");
+  const transactions = openBanking.getTransactionsForBvn(connection.bvn, snapshot.accounts);
+  const eligibility = checkJoinEligibility(snapshot.accounts, transactions, Number(invitationRecord?.contribution_amount));
   if (eligibility.status === "not_eligible") redirect(`/join/${token}?error=not_eligible`);
 
   const { error } = await supabase.rpc("accept_circle_invitation", { p_token: token });

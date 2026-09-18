@@ -56,6 +56,55 @@ export class OpenBankingNigeriaSandboxAdapter implements OpenBankingAdapter {
     }));
   }
 
+  async getAccountsForBvn(bvn: string, memberName: string) {
+    const seed = [...bvn].reduce((total, character, index) => total + Number(character) * (index + 1), 0);
+    const count = (seed % 4) + 1;
+    const identityName = demoNames[seed % demoNames.length];
+    const banks = ["Northstar Bank", "Lagos Trust Bank", "Greenfield Microfinance", "Unity Commercial Bank"];
+    const balances = [185000, 420000, 76000, 315000];
+    const nameVariants = [identityName, `${identityName} ${middleNames[(seed + 1) % middleNames.length]}`, `${identityName.split(" ")[0]} ${identityName.split(" ")[1]}`, `${identityName} (Savings)`];
+
+    const accounts = Array.from({ length: count }, (_, index): BankAccount => {
+      const bankIndex = (seed + index) % banks.length;
+      const accountNumber = `${String(seed + index * 137).padStart(6, "0")}${String(1000 + ((seed * 17 + index * 431) % 9000))}`;
+      return {
+        id: `bvn-${bvn}-${index}`,
+        bankName: banks[bankIndex],
+        accountName: nameVariants[index],
+        maskedNumber: maskAccountNumber(accountNumber),
+        currency: "NGN",
+        availableBalance: balances[bankIndex] + ((seed * 113 + index * 791) % 95000),
+        source: "open_banking_nigeria_sandbox",
+        isSharedSandboxFixture: true,
+      };
+    });
+
+    void memberName;
+    return { identityName, accounts };
+  }
+
+  getTransactionsForBvn(bvn: string, accounts: BankAccount[]): BankTransaction[] {
+    const seed = [...bvn].reduce((total, character, index) => total + Number(character) * (index + 1), 0);
+    const transactions: BankTransaction[] = [];
+    for (let monthIndex = 0; monthIndex < 6; monthIndex += 1) {
+      const month = new Date(Date.UTC(2026, 2 + monthIndex, 12));
+      accounts.forEach((account, accountIndex) => {
+        const base = Math.round((account.availableBalance ?? 0) * (0.55 + ((seed + accountIndex) % 30) / 100));
+        const variation = 1 + (((seed + monthIndex * 7 + accountIndex) % 11) - 5) / 100;
+        transactions.push({
+          id: `${account.id}-inflow-${monthIndex}`,
+          amount: Math.max(10000, Math.round(base * variation)),
+          direction: "credit",
+          status: "completed",
+          category: "inflow",
+          reference: `SANDBOX-INCOME-${monthIndex + 1}`,
+          occurredAt: month.toISOString(),
+        });
+      });
+    }
+    return transactions;
+  }
+
   async getTransactions(accountId: string, contributionAmount: number) {
     const accountNumber = accountId.split("-")[0];
     const to = new Date();
@@ -124,3 +173,6 @@ export class OpenBankingNigeriaSandboxAdapter implements OpenBankingAdapter {
 function maskAccountNumber(accountNumber: string) {
   return `•••• ${accountNumber.slice(-4)}`;
 }
+
+const demoNames = ["Amaka Okafor", "Chinedu Eze", "Aisha Bello", "Tunde Adeyemi", "Ngozi Nwosu", "Yusuf Ibrahim", "Adaobi Musa", "Kelechi Okoro"];
+const middleNames = ["Grace", "David", "Mary", "Samuel", "Rose", "Daniel"];
