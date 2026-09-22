@@ -6,6 +6,7 @@ import { acceptInvitation } from "./actions";
 import { JoinApprovalWatcher } from "@/components/join-approval-watcher";
 import { checkJoinEligibility } from "@/lib/demo-banking/join-eligibility";
 import { PendingButton } from "@/components/pending-button";
+import { OpenBankingNigeriaSandboxAdapter } from "@/lib/open-banking/sandbox-adapter";
 
 type Invite = { circle_id: string; circle_name: string; contribution_amount: number; frequency: string; member_limit: number; start_date: string; proposed_payout_position: number | null; expires_at: string; status: string };
 
@@ -15,7 +16,8 @@ export default async function JoinPage({ params, searchParams }: { params: Promi
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect(`/auth?next=/join/${token}`);
-  if (!user.user_metadata.demo_bank_profile_key) redirect(`/bank?next=/join/${token}`);
+  const connection = user.user_metadata.sandbox_bank_connection as { bvn?: string } | undefined;
+  if (!connection?.bvn) redirect(`/bank?next=/join/${token}`);
   const { data, error } = await supabase.rpc("get_invitation_by_token", { p_token: token });
   const invite = (Array.isArray(data) ? data[0] : data) as Invite | undefined;
   if (error || !invite) return <InvalidInvite />;
@@ -30,7 +32,10 @@ export default async function JoinPage({ params, searchParams }: { params: Promi
   }
   const money = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 });
   const payout = Number(invite.contribution_amount) * invite.member_limit;
-  const eligibility = checkJoinEligibility(String(user.user_metadata.demo_bank_profile_key), Number(invite.contribution_amount));
+  const openBanking = new OpenBankingNigeriaSandboxAdapter();
+  const snapshot = await openBanking.getAccountsForBvn(connection.bvn, user.user_metadata.full_name || "Circle member");
+  const transactions = openBanking.getTransactionsForBvn(connection.bvn, snapshot.accounts);
+  const eligibility = checkJoinEligibility(snapshot.accounts, transactions, Number(invite.contribution_amount));
 
   return <main className="min-h-screen bg-[#f4f5f3] px-5 py-12 text-[#17211d]"><div className="mx-auto max-w-2xl"><div className="flex justify-center"><div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-full bg-[#123f31] font-bold text-white">CG</span><div><p className="font-bold">CircleGuard</p><p className="text-xs text-[#7a8580]">Private circle invitation</p></div></div></div>
     <section className="mt-8 overflow-hidden rounded-3xl border border-[#e1e5e2] bg-white shadow-[0_20px_60px_rgba(20,48,37,0.08)]"><div className="border-b border-[#e7eae8] p-7 text-center"><p className="text-sm font-semibold text-[#2b7659]">YOU’RE INVITED TO JOIN</p><h1 className="mt-3 text-3xl font-semibold tracking-tight">{invite.circle_name}</h1><p className="mt-2 text-sm text-[#71807a]">Review the terms before joining this savings circle.</p></div>

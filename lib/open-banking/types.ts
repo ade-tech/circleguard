@@ -11,7 +11,7 @@ export type BankAccount = {
   maskedNumber: string;
   currency: "NGN";
   availableBalance?: number;
-  source: "open_banking_nigeria_sandbox" | "local_mock";
+  source: "open_banking_nigeria_sandbox" | "local_mock" | "official_bank_provider";
   isSharedSandboxFixture: boolean;
 };
 
