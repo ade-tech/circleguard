@@ -19,7 +19,14 @@
   --font-mono: "SFMono-Regular", Consolas, monospace;
 }
 
-html {
+:root,
+html,
+body,
+body > div {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
   scroll-behavior: smooth;
 }
 
